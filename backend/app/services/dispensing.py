@@ -7,8 +7,8 @@ One request == one database transaction. In order, it:
    check;
 2. replays the stored outcome if the key has been seen (or rejects a key that
    is being reused for a different payload);
-3. locks the medicine row FOR SHARE, so a concurrent rule supersede or
-   activation change cannot slip in under the evaluation;
+3. locks the medicine row FOR SHARE, so a concurrent rule supersede cannot
+   slip in under the evaluation (tests/integration/test_concurrency.py);
 4. takes a transaction-scoped advisory lock on (medicine, patient_ref), which
    serialises the read-evaluate-insert of the rolling 30-day check for exactly
    the pairs that can conflict (DECISIONS.md, ADR-002);

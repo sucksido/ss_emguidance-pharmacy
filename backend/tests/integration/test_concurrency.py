@@ -27,7 +27,7 @@ from sqlalchemy import text
 
 from app import db as app_db
 from app import testpoints
-from app.errors import Codes
+from app.errors import ApiError, Codes
 from app.schemas import DispenseIn
 from app.services import dispensing
 from app.timeutil import FixedClock
@@ -152,3 +152,73 @@ def test_different_patients_are_not_serialised_against_each_other(factory, monke
     # If the lock were global (or per medicine) the barrier would time out here.
     results = _run([a, b])
     assert [r.status for r in results] == [201, 201]
+
+
+def _lock_waiters() -> int:
+    with app_db.get_engine().connect() as conn:
+        return conn.scalar(
+            text(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
+                "AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()"
+            )
+        )
+
+
+def test_supersede_cannot_slip_under_an_in_flight_dispense(factory, monkeypatch):
+    """A dispense holds FOR SHARE on its medicine while it evaluates. A concurrent
+    supersede (FOR UPDATE) must wait, then see the committed dispense and refuse
+    to change the rule that governed it. Without the share lock the supersede
+    would commit first and the dispense would be pinned to a rule whose period
+    no longer covers it."""
+    from app.schemas import NewRuleIn
+    from app.services import formulary
+
+    m = factory.medicine()
+    rule = factory.rule(m, date(2026, 1, 1), per=LIMIT, window=LIMIT)
+
+    supersede_blocked = threading.Event()
+    in_dispense = threading.Event()
+
+    def hook(name: str) -> None:
+        if name != "dispense.after_window_read":
+            return
+        in_dispense.set()
+        for _ in range(500):
+            if _lock_waiters() >= 1:
+                supersede_blocked.set()
+                return
+            time.sleep(0.01)
+
+    monkeypatch.setattr(testpoints, "reached", hook)
+    outcome: dict[str, object] = {}
+
+    def do_supersede() -> None:
+        in_dispense.wait(10)
+        with app_db.session_factory()() as s:
+            try:
+                formulary.supersede(
+                    s,
+                    "PARA500",
+                    NewRuleIn(
+                        effective_from=date(2026, 6, 1),
+                        max_quantity_per_dispense=1,
+                        max_quantity_per_30_days=1,
+                        requires_authorisation=False,
+                    ),
+                    clock=FixedClock(NOW),
+                    actor="t",
+                )
+                outcome["supersede"] = "committed"
+            except ApiError as e:
+                outcome["supersede"] = e.errors[0].code
+
+    t = threading.Thread(target=do_supersede)
+    t.start()
+    (result,) = _run([_request(5)])
+    t.join(20)
+
+    assert supersede_blocked.is_set(), "supersede never waited on the dispense; the test proved nothing"
+    assert result.status == 201 and result.body["formulary_rule_id"] == rule.id
+    assert outcome["supersede"] == Codes.RETROACTIVE_RULE_CHANGE
+    with app_db.get_engine().connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM formulary_rules")) == 1
