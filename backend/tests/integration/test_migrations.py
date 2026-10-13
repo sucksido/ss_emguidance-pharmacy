@@ -6,7 +6,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
 from app import db as app_db
-from tests.conftest import alembic_config
+from tests.integration.conftest import alembic_config
 
 pytestmark = pytest.mark.no_db_cleanup
 

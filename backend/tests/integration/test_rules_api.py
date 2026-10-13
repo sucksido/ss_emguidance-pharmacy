@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db as app_db
 from app.errors import Codes
-from tests.conftest import dispense_body
+from tests.integration.conftest import dispense_body
 
 
 def new_rule(**kw):

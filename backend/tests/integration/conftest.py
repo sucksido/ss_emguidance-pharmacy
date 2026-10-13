@@ -39,7 +39,7 @@ from app.main import app  # noqa: E402
 from app.models import FormularyRule, Medicine  # noqa: E402
 from app.timeutil import FixedClock  # noqa: E402
 
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 NOW = datetime(2026, 6, 30, 10, 0, tzinfo=UTC)  # 12:00 SAST, Tuesday 30 June 2026
 
 

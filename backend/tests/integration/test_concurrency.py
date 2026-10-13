@@ -31,7 +31,7 @@ from app.errors import Codes
 from app.schemas import DispenseIn
 from app.services import dispensing
 from app.timeutil import FixedClock
-from tests.conftest import NOW
+from tests.integration.conftest import NOW
 
 LIMIT = 10
 

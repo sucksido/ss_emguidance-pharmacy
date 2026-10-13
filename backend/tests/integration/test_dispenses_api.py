@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 
 from app.errors import Codes
 from app.models import Dispense, DispenseAttempt
-from tests.conftest import dispense_body
+from tests.integration.conftest import dispense_body
 
 URL = "/api/v1/dispenses"
 
