@@ -186,6 +186,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .clock { display: none; }
   .topbar-inner { gap: 12px; padding: 0 16px; }
   .nav a span { display: none; }
+  .pager { flex-wrap: wrap; gap: 10px; }
+  .key-line { width: 100%; }
   main { padding: 20px 16px 48px; }
 }
 
