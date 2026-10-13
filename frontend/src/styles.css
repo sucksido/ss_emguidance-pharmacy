@@ -1,1 +1,37 @@
-/* You can add global styles to this file, and also import other style files */
+:root { --fg:#1d2330; --muted:#667085; --line:#d9dde5; --bg:#f7f8fa; --accent:#1f5eff; --ok:#137333; --okbg:#e6f4ea; --bad:#b3261e; --badbg:#fdecea; --sched:#8a5a00; --schedbg:#fff4d6; }
+* { box-sizing: border-box; }
+body { margin:0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--fg); background:var(--bg); }
+header { display:flex; gap:24px; align-items:center; padding:12px 24px; background:#fff; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+header nav { display:flex; gap:16px; } header small { margin-left:auto; color:var(--muted); }
+a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; } a.active { font-weight:600; }
+main { max-width:1100px; margin:0 auto; padding:16px 24px 48px; }
+h1 small, h2 small { color:var(--muted); font-weight:400; font-size:.7em; }
+table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); }
+th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { background:#f0f2f6; font-weight:600; }
+table.busy { opacity:.55; } td.empty { color:var(--muted); text-align:center; padding:20px; }
+tr.in-force { background:var(--okbg); }
+input { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; width:100%; }
+input.ng-invalid.ng-touched { border-color:var(--bad); }
+label { display:flex; flex-direction:column; gap:4px; font-weight:500; }
+label.check { flex-direction:row; align-items:center; } label.check input { width:auto; }
+label.search { max-width:420px; margin-bottom:12px; }
+form.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px; background:#fff; padding:16px; border:1px solid var(--line); border-radius:8px; }
+form.inline { display:flex; gap:8px; align-items:flex-end; max-width:520px; }
+.actions { display:flex; gap:10px; align-items:center; grid-column:1/-1; flex-wrap:wrap; }
+button { font:inherit; padding:7px 14px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+button.secondary { background:#fff; color:var(--accent); } button:disabled { opacity:.5; cursor:not-allowed; }
+.pager { display:flex; gap:12px; align-items:center; justify-content:center; margin:12px 0; }
+.chip { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#eef0f4; }
+.chip.ok, .chip.in_force { background:var(--okbg); color:var(--ok); font-weight:600; }
+.chip.muted, .chip.past { color:var(--muted); } .chip.scheduled { background:var(--schedbg); color:var(--sched); }
+.err { color:var(--bad); font-weight:400; font-size:13px; }
+.hint, .muted { color:var(--muted); font-weight:400; font-size:13px; }
+.problem { background:var(--badbg); color:var(--bad); border:1px solid #f3c2bd; padding:10px 14px; border-radius:8px; margin:12px 0; }
+.problem ul { margin:6px 0 0; padding-left:20px; } .problem code { font-size:12px; }
+.ok-msg { background:var(--okbg); color:var(--ok); border:1px solid #b7dfc2; padding:10px 14px; border-radius:8px; margin:12px 0; }
+.current { background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 14px; }
+.timeline { position:relative; height:44px; background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; overflow:hidden; }
+.timeline .seg { position:absolute; top:8px; bottom:8px; border-right:2px solid #fff; font-size:11px; padding:5px 6px; overflow:hidden; white-space:nowrap; background:#e4e7ee; color:var(--muted); }
+.timeline .seg.in_force { background:var(--ok); color:#fff; } .timeline .seg.scheduled { background:var(--schedbg); color:var(--sched); }
+.timeline .today { position:absolute; top:0; bottom:0; width:2px; background:var(--bad); }
