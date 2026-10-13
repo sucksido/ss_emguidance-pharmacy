@@ -82,5 +82,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("formulary_rules")
     op.drop_table("medicines")
-    # btree_gist is deliberately left installed: other objects in the database may
-    # depend on it and dropping extensions is not this migration's business.
+    # No CASCADE: fails loudly rather than drop objects that are not ours.
+    op.execute("DROP EXTENSION IF EXISTS btree_gist")

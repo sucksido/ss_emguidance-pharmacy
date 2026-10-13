@@ -40,6 +40,9 @@ def test_each_revision_downgrades_and_reupgrades_cleanly():
     command.downgrade(cfg, "base")
     app_db.reset_engine()
     assert _tables() == set()
+    with app_db.get_engine().connect() as conn:
+        exts = set(conn.scalars(text("SELECT extname FROM pg_extension")))
+    assert not exts & {"btree_gist", "pg_trgm"}
 
 
 def _seed_at_0002(conn):

@@ -41,3 +41,6 @@ def downgrade() -> None:
     op.drop_index("ix_medicines_name_id", table_name="medicines")
     op.execute("DROP INDEX ix_medicines_code_trgm")
     op.execute("DROP INDEX ix_medicines_name_trgm")
+    # No CASCADE: if anything else came to depend on pg_trgm this fails loudly
+    # instead of silently dropping someone else's objects.
+    op.execute("DROP EXTENSION IF EXISTS pg_trgm")
