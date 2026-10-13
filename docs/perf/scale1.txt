@@ -1,0 +1,18 @@
+Seeded 500 medicines, 2016 rules (4.0/medicine), 5000 dispenses across 2150 patient refs, 2024-10-13 .. 2026-10-13.
+Independent SQL re-check of every 30-day window: 0 breaches.
+Generated in 0.1s (23 candidates rejected by the rule engine), loaded in 1.0s.
+Dataset: {'medicines': 500, 'formulary_rules': 2016, 'dispenses': 5000}; 300 timed requests per endpoint after 20 warm-up
+
+endpoint                                           p50      p95      p99      max
+GET /medicines (no filter)                        6.8ms    10.3ms    14.5ms    21.7ms
+GET /medicines?q=<name fragment>                  7.7ms    11.6ms    14.8ms    29.9ms
+GET /medicines?q=<code fragment>                  7.2ms     9.2ms    11.5ms    13.1ms
+GET /medicines/{code}                             7.9ms    12.6ms    16.5ms    29.2ms
+GET /medicines/{code}/rules                       7.9ms    13.6ms    19.7ms    23.2ms
+GET /dispenses (no filter)                        8.7ms    13.3ms    16.5ms    33.0ms
+GET /dispenses?patient_ref                        7.9ms    13.4ms    18.9ms    23.9ms
+GET /dispenses?medicine_code                      9.5ms    14.5ms    25.7ms    60.0ms
+GET /dispenses?patient_ref&medicine_code          8.5ms    14.1ms    24.6ms    42.4ms
+GET /dispense-attempts                            6.3ms     8.8ms    10.9ms    11.3ms
+
+PASS: worst p95 14.5ms < 300ms

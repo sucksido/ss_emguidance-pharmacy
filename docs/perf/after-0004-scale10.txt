@@ -1,0 +1,104 @@
+Dataset: {'medicines': 5000, 'formulary_rules': 19905, 'dispenses': 50000}; 200 timed requests per endpoint after 20 warm-up
+
+endpoint                                           p50      p95      p99      max
+GET /medicines (no filter)                        6.1ms     8.3ms    10.8ms    34.4ms
+GET /medicines?q=<name fragment>                  7.7ms    12.0ms    17.3ms    18.9ms
+GET /medicines?q=<code fragment>                  7.0ms    11.0ms    16.4ms    18.4ms
+GET /medicines/{code}                             7.7ms    10.1ms    11.3ms    11.6ms
+GET /medicines/{code}/rules                       7.6ms    10.0ms    14.2ms    28.3ms
+GET /dispenses (no filter)                        7.9ms    10.8ms    14.6ms   110.2ms
+GET /dispenses?patient_ref                        7.5ms     9.8ms    12.6ms    14.9ms
+GET /dispenses?medicine_code                      8.1ms    10.7ms    12.4ms    13.0ms
+GET /dispenses?patient_ref&medicine_code          8.6ms    14.1ms    18.0ms    21.8ms
+GET /dispense-attempts                            6.3ms     9.1ms    17.1ms    51.0ms
+
+--- medicine search (ILIKE %term%)
+Limit  (cost=107.70..107.76 rows=21 width=68) (actual time=0.186..0.189 rows=21 loops=1)
+  Buffers: shared hit=52
+  ->  Sort  (cost=107.70..107.83 rows=50 width=68) (actual time=0.185..0.186 rows=21 loops=1)
+        Sort Key: name, id
+        Sort Method: top-N heapsort  Memory: 29kB
+        Buffers: shared hit=52
+        ->  Bitmap Heap Scan on medicines  (cost=43.25..106.36 rows=50 width=68) (actual time=0.056..0.142 rows=52 loops=1)
+              Recheck Cond: (((name)::text ~~* '%lmax%'::text) OR ((code)::text ~~* '%lmax%'::text))
+              Rows Removed by Index Recheck: 2
+              Heap Blocks: exact=36
+              Buffers: shared hit=46
+              ->  BitmapOr  (cost=43.25..43.25 rows=50 width=0) (actual time=0.044..0.044 rows=0 loops=1)
+                    Buffers: shared hit=10
+                    ->  Bitmap Index Scan on ix_medicines_name_trgm  (cost=0.00..21.73 rows=50 width=0) (actual time=0.034..0.034 rows=54 loops=1)
+                          Index Cond: ((name)::text ~~* '%lmax%'::text)
+                          Buffers: shared hit=5
+                    ->  Bitmap Index Scan on ix_medicines_code_trgm  (cost=0.00..21.49 rows=1 width=0) (actual time=0.009..0.009 rows=0 loops=1)
+                          Index Cond: ((code)::text ~~* '%lmax%'::text)
+                          Buffers: shared hit=5
+Planning:
+  Buffers: shared hit=41
+Planning Time: 0.921 ms
+Execution Time: 0.258 ms
+
+--- medicines first page
+Limit  (cost=0.28..2.24 rows=21 width=68) (actual time=0.023..0.042 rows=21 loops=1)
+  Buffers: shared hit=23
+  ->  Index Scan using ix_medicines_name_id on medicines  (cost=0.28..467.27 rows=5000 width=68) (actual time=0.022..0.040 rows=21 loops=1)
+        Buffers: shared hit=23
+Planning Time: 0.057 ms
+Execution Time: 0.051 ms
+
+--- patient ledger
+Limit  (cost=0.41..14.15 rows=3 width=86) (actual time=0.022..0.023 rows=1 loops=1)
+  Buffers: shared hit=5
+  ->  Index Scan Backward using ix_dispenses_patient_time on dispenses  (cost=0.41..14.15 rows=3 width=86) (actual time=0.021..0.022 rows=1 loops=1)
+        Index Cond: ((patient_ref)::text = 'PT-0019925'::text)
+        Buffers: shared hit=5
+Planning:
+  Buffers: shared hit=23
+Planning Time: 0.149 ms
+Execution Time: 0.036 ms
+
+--- dispenses by medicine
+Limit  (cost=53.05..53.08 rows=11 width=86) (actual time=0.174..0.176 rows=13 loops=1)
+  Buffers: shared hit=21 read=1
+  InitPlan 1 (returns $0)
+    ->  Index Scan using uq_medicines_code on medicines  (cost=0.28..8.30 rows=1 width=8) (actual time=0.010..0.011 rows=1 loops=1)
+          Index Cond: ((code)::text = 'MED004306'::text)
+          Buffers: shared hit=3
+  ->  Sort  (cost=44.75..44.78 rows=11 width=86) (actual time=0.173..0.174 rows=13 loops=1)
+        Sort Key: dispenses.dispensed_at DESC, dispenses.id DESC
+        Sort Method: quicksort  Memory: 26kB
+        Buffers: shared hit=21 read=1
+        ->  Bitmap Heap Scan on dispenses  (cost=4.50..44.56 rows=11 width=86) (actual time=0.088..0.110 rows=13 loops=1)
+              Recheck Cond: (medicine_id = $0)
+              Heap Blocks: exact=13
+              Buffers: shared hit=18 read=1
+              ->  Bitmap Index Scan on ix_dispenses_medicine_time  (cost=0.00..4.50 rows=11 width=0) (actual time=0.083..0.083 rows=13 loops=1)
+                    Index Cond: (medicine_id = $0)
+                    Buffers: shared hit=5 read=1
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.134 ms
+Execution Time: 0.198 ms
+
+--- all dispenses, newest first
+Limit  (cost=0.29..2.14 rows=21 width=86) (actual time=0.011..0.037 rows=21 loops=1)
+  Buffers: shared hit=23
+  ->  Index Scan Backward using ix_dispenses_time on dispenses  (cost=0.29..4410.23 rows=50000 width=86) (actual time=0.011..0.036 rows=21 loops=1)
+        Buffers: shared hit=23
+Planning Time: 0.055 ms
+Execution Time: 0.047 ms
+
+--- 30-day window read (dispense validation)
+Index Scan using ix_dispenses_medicine_time on dispenses  (cost=8.72..16.75 rows=1 width=12) (actual time=0.027..0.027 rows=0 loops=1)
+  Index Cond: ((medicine_id = $0) AND (dispensed_at >= (now() - '60 days'::interval)) AND (dispensed_at < now()))
+  Filter: ((patient_ref)::text = 'PT-0011519'::text)
+  Buffers: shared hit=6
+  InitPlan 1 (returns $0)
+    ->  Index Scan using uq_medicines_code on medicines  (cost=0.28..8.30 rows=1 width=8) (actual time=0.008..0.008 rows=1 loops=1)
+          Index Cond: ((code)::text = 'MED004259'::text)
+          Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=13
+Planning Time: 0.178 ms
+Execution Time: 0.040 ms
+
+PASS: worst p95 14.1ms < 300ms
