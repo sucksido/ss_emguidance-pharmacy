@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM node:22-alpine AS deps
+# Never prompt for Angular CLI telemetry in containers (it would block or opt in).
+ENV NG_CLI_ANALYTICS=false CI=true
 WORKDIR /web
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
