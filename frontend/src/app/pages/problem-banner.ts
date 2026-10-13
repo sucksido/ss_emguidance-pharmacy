@@ -7,21 +7,24 @@ import { Problem } from '../core/api.types';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (problem(); as p) {
-      <div class="problem" role="alert">
-        <strong>{{ p.title }}</strong>
-        @if (p.detail) { <span> — {{ p.detail }}</span> }
-        @if (p.errors.length) {
-          <ul>
-            @for (e of p.errors; track $index) {
-              <li>
-                <code>{{ e.code }}</code>
-                @if (e.field) { <em>({{ e.field }})</em> }
-                {{ e.message }}
-              </li>
-            }
-          </ul>
-        }
-        @if (p.attempt_id) { <small>Attempt #{{ p.attempt_id }} logged.</small> }
+      <div class="alert bad" role="alert">
+        <span class="icon">!</span>
+        <div>
+          <strong>{{ p.title }}</strong>
+          @if (p.detail) { <span>{{ p.detail }}</span> }
+          @if (p.errors.length) {
+            <ul>
+              @for (e of p.errors; track $index) {
+                <li>
+                  <code>{{ e.code }}</code>
+                  <span>{{ e.message }}</span>
+                  @if (e.field) { <span class="hint">· field: {{ e.field }}</span> }
+                </li>
+              }
+            </ul>
+          }
+          @if (p.attempt_id) { <small>Logged as attempt #{{ p.attempt_id }}. No dispense was recorded.</small> }
+        </div>
       </div>
     }
   `,

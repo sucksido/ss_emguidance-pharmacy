@@ -27,65 +27,103 @@ type Phase = 'editing' | 'submitting' | 'accepted' | 'rejected' | 'failed';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ReactiveFormsModule, RouterLink, ProblemBanner],
   template: `
-    <h1>Capture dispense</h1>
-    <form [formGroup]="form" (ngSubmit)="submit()" class="grid" novalidate>
-      <label>Medicine code
-        <input formControlName="medicine_code" placeholder="MED000001" autocomplete="off" />
-        @if (medicine(); as m) {
-          <span class="hint">{{ m.name }}
-            @if (!m.is_active) { — <strong>inactive</strong> }
-            @if (m.current_rule; as r) {
-              — today: max {{ r.max_quantity_per_dispense }}/dispense, {{ r.max_quantity_per_30_days }}/30 days{{ r.requires_authorisation ? ', authorisation required' : '' }}
-            }
-          </span>
+    <div class="page-head">
+      <div>
+        <h1>Capture dispense</h1>
+        <p>Validated against the formulary rule in force at the dispense time. Backdating is allowed.</p>
+      </div>
+    </div>
+
+    <div class="split">
+      <div>
+        <form class="card" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          <div class="card-head"><div><h2>Dispense details</h2><p>All times are Africa/Johannesburg.</p></div></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <label>Medicine code
+                <input formControlName="medicine_code" placeholder="MED000001" autocomplete="off" class="mono" />
+                @for (e of fieldErrors('medicine_code'); track $index) { <span class="err">{{ e.message }}</span> }
+              </label>
+              <label>Patient reference
+                <input formControlName="patient_ref" placeholder="PT-0000001" autocomplete="off" class="mono" />
+                @for (e of fieldErrors('patient_ref'); track $index) { <span class="err">{{ e.message }}</span> }
+              </label>
+              <label><span class="label-text">Quantity <small>units</small></span>
+                <input type="number" min="1" step="1" formControlName="quantity" />
+                @for (e of fieldErrors('quantity'); track $index) { <span class="err">{{ e.message }}</span> }
+              </label>
+              <label><span class="label-text">Dispensed at <small>may be backdated</small></span>
+                <input type="datetime-local" formControlName="dispensed_at" />
+                @for (e of fieldErrors('dispensed_at'); track $index) { <span class="err">{{ e.message }}</span> }
+              </label>
+              <label class="full"><span class="label-text">Authorisation reference <small>required when the rule says so</small></span>
+                <input formControlName="authorisation_ref" autocomplete="off" placeholder="e.g. AUTH-123456" />
+                @for (e of fieldErrors('authorisation_ref'); track $index) { <span class="err">{{ e.message }}</span> }
+              </label>
+            </div>
+          </div>
+          <div class="pager">
+            <span class="key-line" title="Identifies this submission; retries reuse it so nothing is recorded twice">
+              Idempotency key <code>{{ idempotencyKey().slice(0, 15) }}…</code>
+            </span>
+            <div class="group">
+              <button type="button" class="secondary" (click)="startNew()">Clear</button>
+              <button type="submit" [disabled]="form.invalid || phase() === 'submitting'">
+                @if (phase() === 'submitting') { <span class="spinner"></span> Submitting… }
+                @else if (phase() === 'failed') { Retry same request }
+                @else { Submit dispense }
+              </button>
+            </div>
+          </div>
+        </form>
+
+        @if (unplaced().length) {
+          <div class="alert bad"><span class="icon">!</span><div>
+            @for (e of unplaced(); track $index) { <div>{{ e.message }}</div> }
+          </div></div>
         }
-        @for (e of fieldErrors('medicine_code'); track $index) { <span class="err">{{ e.message }}</span> }
-      </label>
+        <app-problem-banner [problem]="problem()" />
 
-      <label>Patient reference
-        <input formControlName="patient_ref" placeholder="PT-0000001" autocomplete="off" />
-        @for (e of fieldErrors('patient_ref'); track $index) { <span class="err">{{ e.message }}</span> }
-      </label>
-
-      <label>Quantity
-        <input type="number" min="1" step="1" formControlName="quantity" />
-        @for (e of fieldErrors('quantity'); track $index) { <span class="err">{{ e.message }}</span> }
-      </label>
-
-      <label>Dispensed at <small>(Africa/Johannesburg time; may be backdated)</small>
-        <input type="datetime-local" formControlName="dispensed_at" />
-        @for (e of fieldErrors('dispensed_at'); track $index) { <span class="err">{{ e.message }}</span> }
-      </label>
-
-      <label>Authorisation reference <small>(if the rule requires one)</small>
-        <input formControlName="authorisation_ref" autocomplete="off" />
-        @for (e of fieldErrors('authorisation_ref'); track $index) { <span class="err">{{ e.message }}</span> }
-      </label>
-
-      <div class="actions">
-        <button type="submit" [disabled]="form.invalid || phase() === 'submitting'">
-          {{ phase() === 'submitting' ? 'Submitting…' : phase() === 'failed' ? 'Retry (same request)' : 'Submit dispense' }}
-        </button>
-        <button type="button" class="secondary" (click)="startNew()">New dispense</button>
-        <small class="muted">Idempotency key: <code>{{ idempotencyKey() }}</code></small>
+        @if (accepted(); as d) {
+          <div class="alert ok" role="status">
+            <span class="icon">✓</span>
+            <div>
+              <strong>Dispense #{{ d.id }} recorded{{ replayed() ? ' (already processed, original result returned)' : '' }}</strong>
+              {{ d.quantity }} × {{ d.medicine_name }} to <span class="mono">{{ d.patient_ref }}</span> at {{ when(d.dispensed_at) }}.
+              Business date {{ d.business_date }}, validated against rule #{{ d.formulary_rule_id }}.
+              <div style="margin-top:8px"><a [routerLink]="['/patients', d.patient_ref]">Open patient ledger →</a></div>
+            </div>
+          </div>
+        }
       </div>
-    </form>
 
-    @if (unplaced().length) {
-      <div class="problem">
-        @for (e of unplaced(); track $index) { <div>{{ e.message }}</div> }
-      </div>
-    }
-    <app-problem-banner [problem]="problem()" />
-
-    @if (accepted(); as d) {
-      <div class="ok-msg" role="status">
-        Dispense #{{ d.id }} recorded{{ replayed() ? ' (replayed — this request had already been processed)' : '' }}:
-        {{ d.quantity }} × {{ d.medicine_name }} to {{ d.patient_ref }} at {{ when(d.dispensed_at) }}
-        (business date {{ d.business_date }}, rule #{{ d.formulary_rule_id }}).
-        <a [routerLink]="['/patients', d.patient_ref]">View patient ledger</a>
-      </div>
-    }
+      <aside class="card aside-card">
+        <div class="card-head"><div><h2>Medicine</h2><p>Today's limits, for guidance</p></div></div>
+        <div class="card-body">
+          @if (medicine(); as m) {
+            <div>
+              <div class="cell-title">{{ m.name }}</div>
+              <div class="med-meta" style="margin-top:6px">
+                <span class="code-chip">{{ m.code }}</span>
+                @if (m.is_active) { <span class="badge ok">Active</span> } @else { <span class="badge bad">Inactive</span> }
+              </div>
+            </div>
+            @if (m.current_rule; as r) {
+              <div class="limit-row"><span>Per dispense</span><strong>{{ r.max_quantity_per_dispense }}</strong></div>
+              <div class="limit-row"><span>Per 30 days</span><strong>{{ r.max_quantity_per_30_days }}</strong></div>
+              <div class="limit-row"><span>Authorisation</span>
+                @if (r.requires_authorisation) { <span class="badge scheduled">Required</span> } @else { <span class="badge ok">Not required</span> }
+              </div>
+              <p class="hint" style="margin:0">A backdated dispense is judged by the rule in force on its date, which may differ.</p>
+            } @else {
+              <div class="alert warn" style="margin:0"><span class="icon">!</span><div>No rule in force today.</div></div>
+            }
+          } @else {
+            <p class="hint" style="margin:0">Enter a medicine code to see its current rule.</p>
+          }
+        </div>
+      </aside>
+    </div>
   `,
 })
 export class DispenseCapturePage implements OnInit {
