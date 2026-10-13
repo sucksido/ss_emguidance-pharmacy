@@ -1,0 +1,101 @@
+Dataset: {'medicines': 5000, 'formulary_rules': 19905, 'dispenses': 50000}; 200 timed requests per endpoint after 20 warm-up
+
+endpoint                                           p50      p95      p99      max
+GET /medicines (no filter)                        7.4ms     9.9ms    11.1ms    13.2ms
+GET /medicines?q=<name fragment>                 14.2ms    20.9ms    26.8ms    59.1ms
+GET /medicines?q=<code fragment>                 14.2ms    22.9ms    27.7ms    37.1ms
+GET /medicines/{code}                             8.1ms    11.5ms    14.6ms    16.9ms
+GET /medicines/{code}/rules                       7.1ms     9.5ms    10.8ms    14.7ms
+GET /dispenses (no filter)                       49.8ms    62.8ms    69.6ms    86.4ms
+GET /dispenses?patient_ref                        7.9ms    12.7ms    17.5ms    22.9ms
+GET /dispenses?medicine_code                     13.8ms    19.8ms    27.0ms   103.1ms
+GET /dispenses?patient_ref&medicine_code          9.1ms    13.9ms    18.9ms    25.2ms
+GET /dispense-attempts                            7.3ms    12.5ms    14.4ms    15.6ms
+
+--- medicine search (ILIKE %term%)
+Limit  (cost=139.35..139.40 rows=21 width=68) (actual time=6.738..6.743 rows=21 loops=1)
+  Buffers: shared hit=69
+  ->  Sort  (cost=139.35..139.47 rows=50 width=68) (actual time=6.736..6.739 rows=21 loops=1)
+        Sort Key: name, id
+        Sort Method: top-N heapsort  Memory: 29kB
+        Buffers: shared hit=69
+        ->  Seq Scan on medicines  (cost=0.00..138.00 rows=50 width=68) (actual time=0.037..6.680 rows=52 loops=1)
+              Filter: (((name)::text ~~* '%lmax%'::text) OR ((code)::text ~~* '%lmax%'::text))
+              Rows Removed by Filter: 4948
+              Buffers: shared hit=63
+Planning:
+  Buffers: shared hit=15
+Planning Time: 0.420 ms
+Execution Time: 6.773 ms
+
+--- medicines first page
+Limit  (cost=247.81..247.86 rows=21 width=68) (actual time=1.096..1.100 rows=21 loops=1)
+  Buffers: shared hit=63
+  ->  Sort  (cost=247.81..260.31 rows=5000 width=68) (actual time=1.095..1.096 rows=21 loops=1)
+        Sort Key: name, id
+        Sort Method: top-N heapsort  Memory: 29kB
+        Buffers: shared hit=63
+        ->  Seq Scan on medicines  (cost=0.00..113.00 rows=5000 width=68) (actual time=0.005..0.336 rows=5000 loops=1)
+              Buffers: shared hit=63
+Planning Time: 0.079 ms
+Execution Time: 1.116 ms
+
+--- patient ledger
+Limit  (cost=14.18..14.18 rows=3 width=86) (actual time=0.028..0.028 rows=1 loops=1)
+  Buffers: shared hit=7
+  ->  Sort  (cost=14.18..14.18 rows=3 width=86) (actual time=0.027..0.028 rows=1 loops=1)
+        Sort Key: dispensed_at DESC, id DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=7
+        ->  Index Scan using ix_dispenses_patient_medicine_time on dispenses  (cost=0.41..14.15 rows=3 width=86) (actual time=0.015..0.015 rows=1 loops=1)
+              Index Cond: ((patient_ref)::text = 'PT-0019925'::text)
+              Buffers: shared hit=4
+Planning:
+  Buffers: shared hit=26
+Planning Time: 0.203 ms
+Execution Time: 0.042 ms
+
+--- dispenses by medicine
+Limit  (cost=1354.49..1354.52 rows=11 width=86) (actual time=4.678..4.682 rows=13 loops=1)
+  Buffers: shared hit=724
+  InitPlan 1 (returns $0)
+    ->  Index Scan using uq_medicines_code on medicines  (cost=0.28..8.30 rows=1 width=8) (actual time=0.019..0.020 rows=1 loops=1)
+          Index Cond: ((code)::text = 'MED004306'::text)
+          Buffers: shared hit=3
+  ->  Sort  (cost=1346.19..1346.22 rows=11 width=86) (actual time=4.677..4.678 rows=13 loops=1)
+        Sort Key: dispenses.dispensed_at DESC, dispenses.id DESC
+        Sort Method: quicksort  Memory: 26kB
+        Buffers: shared hit=724
+        ->  Seq Scan on dispenses  (cost=0.00..1346.00 rows=11 width=86) (actual time=0.747..4.658 rows=13 loops=1)
+              Filter: (medicine_id = $0)
+              Rows Removed by Filter: 49987
+              Buffers: shared hit=724
+Planning Time: 0.168 ms
+Execution Time: 4.806 ms
+
+--- all dispenses, newest first
+Limit  (cost=2569.08..2569.13 rows=21 width=86) (actual time=10.218..10.222 rows=21 loops=1)
+  Buffers: shared hit=721
+  ->  Sort  (cost=2569.08..2694.08 rows=50000 width=86) (actual time=10.216..10.219 rows=21 loops=1)
+        Sort Key: dispensed_at DESC, id DESC
+        Sort Method: top-N heapsort  Memory: 29kB
+        Buffers: shared hit=721
+        ->  Seq Scan on dispenses  (cost=0.00..1221.00 rows=50000 width=86) (actual time=0.007..3.296 rows=50000 loops=1)
+              Buffers: shared hit=721
+Planning Time: 0.083 ms
+Execution Time: 10.241 ms
+
+--- 30-day window read (dispense validation)
+Index Scan using ix_dispenses_patient_medicine_time on dispenses  (cost=8.72..16.75 rows=1 width=12) (actual time=0.026..0.027 rows=0 loops=1)
+  Index Cond: (((patient_ref)::text = 'PT-0011519'::text) AND (medicine_id = $0) AND (dispensed_at >= (now() - '60 days'::interval)) AND (dispensed_at < now()))
+  Buffers: shared hit=6
+  InitPlan 1 (returns $0)
+    ->  Index Scan using uq_medicines_code on medicines  (cost=0.28..8.30 rows=1 width=8) (actual time=0.012..0.012 rows=1 loops=1)
+          Index Cond: ((code)::text = 'MED004259'::text)
+          Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=9
+Planning Time: 0.227 ms
+Execution Time: 0.043 ms
+
+PASS: worst p95 62.8ms < 300ms
