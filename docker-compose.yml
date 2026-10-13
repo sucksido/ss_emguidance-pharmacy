@@ -1,0 +1,48 @@
+name: pharmacy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pharmacy
+      POSTGRES_PASSWORD: pharmacy
+      POSTGRES_DB: pharmacy
+      TZ: UTC
+    ports:
+      - "5433:5432"   # 5433 on the host to avoid clashing with a local Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pharmacy -d pharmacy"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: ./backend
+    environment:
+      APP_DATABASE_URL: postgresql+psycopg://pharmacy:pharmacy@db:5432/pharmacy
+      TZ: UTC   # the container clock is UTC; business time zone is applied in code
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build: ./frontend   # final stage: nginx serving the built app, proxying /api
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+  # Not started by `docker compose up`; used by `docker compose run --rm frontend-tests`.
+  frontend-tests:
+    build:
+      context: ./frontend
+      target: test
+    profiles: ["tools"]
+
+volumes:
+  pgdata:
