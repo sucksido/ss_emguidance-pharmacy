@@ -13,7 +13,7 @@
 **Request path for `POST /api/v1/dispenses`** (`app/services/dispensing.py`), one transaction:
 
 1. `pg_advisory_xact_lock` on the idempotency key → if the key exists, replay the stored response (or 422 if the payload differs).
-2. `SELECT … FOR SHARE` on the medicine row, so a rule supersede or deactivation cannot interleave.
+2. `SELECT … FOR SHARE` on the medicine row, so a concurrent rule supersede waits and then sees this dispense (`test_supersede_cannot_slip_under_an_in_flight_dispense`).
 3. `pg_advisory_xact_lock` on *(medicine, patient_ref)*, so the rolling-window read and the insert happen as one unit for that pair.
 4. Load the facts: rules overlapping the dispense's business date + 29 days; this patient's dispenses of this medicine from 29 days before to 29 days after.
 5. **`rules_engine.evaluate()` decides.** It returns every violation, each with the field and rule it relates to.

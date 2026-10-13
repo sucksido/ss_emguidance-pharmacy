@@ -36,12 +36,3 @@ Frontend (Vitest):
 ```bash
 docker compose run --rm frontend-tests
 ```
-
-## Measure listing latency
-
-After seeding, with the stack running:
-
-```bash
-docker compose exec api python -m app.bench            # p50/p95/p99 per listing endpoint; exits non-zero if any p95 >= 300 ms
-docker compose exec api python -m app.bench --explain  # also prints EXPLAIN (ANALYZE, BUFFERS) for each listing query
-```

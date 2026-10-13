@@ -34,7 +34,7 @@ Each entry gives what I chose, what I considered instead, and what I gave up. Wh
 
 **Decision.** Inside the dispense transaction, call `pg_advisory_xact_lock(hashtextextended('dispense-window:<medicine_id>:<patient_ref>', 0))` before reading the window. It is released automatically at commit or rollback. The full lock order is idempotency key → medicine row `FOR SHARE` → (medicine, patient). The supersede path takes only the medicine row `FOR UPDATE`, so there is no cycle and no deadlock.
 
-**How it is proven** (`tests/integration/test_concurrency.py`). Two threads, each with its own connection. A test hook pauses the first transaction *after* it has read the window and *before* it inserts. The test then polls `pg_locks` until it sees the second transaction **waiting** on the advisory lock, and only then releases the first. The test fails if that wait is never observed, so it cannot pass by accident of scheduling. A **negative control** removes only the lock and asserts that the same choreography *does* breach the limit (12 > 10). I also mutation-tested it: with the lock body replaced by `return None`, the main test and the 20-thread stress test both fail.
+**How it is proven** (`tests/integration/test_concurrency.py`). Two threads, each with its own connection. A test hook pauses the first transaction *after* it has read the window and *before* it inserts. The test then polls `pg_locks` until it sees the second transaction **waiting** on the advisory lock, and only then releases the first. The test fails if that wait is never observed, so it cannot pass by accident of scheduling. `test_supersede_cannot_slip_under_an_in_flight_dispense` does the same for the medicine-row `FOR SHARE`: a concurrent supersede is observed waiting, then refuses because it now sees the dispense. A **negative control** removes only the advisory lock and asserts that the same choreography *does* breach the limit (12 > 10). I also mutation-tested it: with the lock body replaced by `return None`, the main test and the 20-thread stress test both fail.
 
 **Considered.**
 - *SERIALIZABLE isolation.* It is correct and needs no hand-written lock, but it aborts with serialization failures that every caller must retry. It can also raise false-positive serialization failures at higher load, because predicate locks are coarse-grained, and the retry logic would have to replay the attempt-log write carefully. I preferred blocking to aborting for a short critical section.
@@ -72,6 +72,7 @@ Each entry gives what I chose, what I considered instead, and what I gave up. Wh
 ```
 
 - `code` (top level) is what the client switches on. `errors[].code` is a stable reason. `errors[].field` is the **request body field name**, or `null` when the reason belongs to the form as a whole. `rule_id` points at the formulary rule that produced it. `meta` holds the numbers, so a UI never parses `message`.
+- Unhandled exceptions become a 500 problem document in the request middleware (not a Starlette exception handler, which would run outside it), so even crashes carry `X-Request-ID` and CORS headers and never leak internals. Out-of-range dates (outside 1900–2100), NUL characters and forged cursors are rejected as 422 field errors before they can reach date arithmetic or SQL (`tests/integration/test_edge_inputs.py`).
 - Pydantic validation errors go through the same envelope (`VALIDATION_FAILED`, `FIELD_REQUIRED` / `FIELD_INVALID`). Cross-field checks are written as *field* validators so they land on a field.
 - Status codes: 422 for a well-formed request the business rules reject; 409 for a conflict with existing state (rule history); 404 for a missing path resource. An unknown `medicine_code` *inside a dispense body* is a 422 field error, not a 404, because it is a fact about the request, not the URL.
 
@@ -93,7 +94,7 @@ Each entry gives what I chose, what I considered instead, and what I gave up. Wh
 | Medicine search `ILIKE '%term%'` | `pg_trgm` GIN on `name` and on `code` (0004) |
 | Catalogue first page, keyset | `(name, id)` (0004) |
 
-**Validation.** `python -m app.bench` makes full HTTP round trips (200 per endpoint after warm-up, random parameters drawn from the data) and prints p50/p95/p99. `--explain` prints `EXPLAIN (ANALYZE, BUFFERS)`. Results are in `docs/perf/`. I captured a baseline at 10× scale *before* migration 0004, because at 1× every table fits in a few pages and the planner rightly seq-scans, which would prove nothing:
+**Validation.** `python -m app.bench` (how to run: `docs/perf/README.md`) makes full HTTP round trips (200 per endpoint after warm-up, random parameters drawn from the data) and prints p50/p95/p99. `--explain` prints `EXPLAIN (ANALYZE, BUFFERS)`. Results are in `docs/perf/`. I captured a baseline at 10× scale *before* migration 0004, because at 1× every table fits in a few pages and the planner rightly seq-scans, which would prove nothing:
 
 | | before 0004 (10×) | after 0004 (10×) | after, 1× (brief) | after, 100× (500k dispenses) |
 |---|---|---|---|---|

@@ -22,10 +22,12 @@ These happened during the build and are visible in the history:
 | Angular 22 | Rejected in favour of Angular 21 | Angular 22 requires Node ≥ 22.22.3; 21 supports the Node 22 LTS in the Docker image |
 | `npm install` | Failed with an npm arborist peer-resolution bug (`edgesOut`); `.npmrc` sets `legacy-peer-deps` | Toolchain bug, not a dependency conflict; `npm ci` from the lockfile is clean |
 | DB fixtures in the root `tests/conftest.py` | Moved to `tests/integration/conftest.py` | Unit tests were needlessly requiring a database |
+| Edge-input handling | A separate Claude review agent, prompted to look adversarially for defects, found that extreme dates, NUL bytes and hand-crafted cursors (with a valid filter hash) produced 500s; that 500s lacked `X-Request-ID`/CORS; that the medicine `FOR SHARE` claim was untested; and that the README contained a non-run/seed/test section. All fixed, each with a test | The first pass only tested well-formed input |
 | Leftover "pre-truncation" variable and a dead loop in the seed | Removed | Code that has no purpose shouldn't ship |
 
 ## How correctness was checked rather than assumed
 
+- The supersede-vs-dispense race test was mutation-tested the same way (removing `FOR SHARE` makes it fail).
 - The concurrency test was **mutation-tested**: with the advisory lock replaced by `return None` it fails (and so does the 20-thread stress test). It also refuses to pass unless `pg_locks` shows the second request actually waiting.
 - The seed runs every generated dispense through the real rule engine, then an independent SQL query re-checks every 30-day window (0 breaches at 1×, 10× and 100×).
 - The backend suite was run on a clean Python 3.12 virtualenv with the pinned requirements. The frontend was built from a clean `npm ci`.
