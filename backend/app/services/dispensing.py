@@ -144,8 +144,11 @@ def _submit_once(session: Session, req: DispenseIn, *, clock: Clock, actor: str 
 
     previous = session.scalar(select(DispenseAttempt).where(DispenseAttempt.idempotency_key == req.idempotency_key))
     if previous is not None:
+        # Read everything we need before ending the transaction (rollback expires ORM state).
+        prev_id, prev_fp = previous.id, previous.request_fingerprint
+        prev_status, prev_body = previous.http_status, previous.response_body
         session.rollback()
-        if previous.request_fingerprint != fp:
+        if prev_fp != fp:
             raise ApiError(
                 422,
                 Codes.IDEMPOTENCY_KEY_REUSED,
@@ -159,11 +162,11 @@ def _submit_once(session: Session, req: DispenseIn, *, clock: Clock, actor: str 
                         code=Codes.IDEMPOTENCY_KEY_REUSED,
                         field="idempotency_key",
                         message="Key already used for a different payload.",
-                        meta={"original_attempt_id": previous.id},
+                        meta={"original_attempt_id": prev_id},
                     )
                 ],
             )
-        return DispenseResult(previous.http_status, previous.response_body, replayed=True)
+        return DispenseResult(prev_status, prev_body, replayed=True)
 
     medicine = session.scalar(select(Medicine).where(Medicine.code == req.medicine_code).with_for_update(read=True))
     on = business_date(req.dispensed_at)
