@@ -25,26 +25,27 @@ def encode_cursor(key: list[Any], filters: dict[str, Any]) -> str:
     return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
 
 
-def decode_cursor(cursor: str, filters: dict[str, Any], arity: int) -> list[Any]:
-    def bad(msg: str) -> ApiError:
-        return ApiError(
-            422,
-            Codes.VALIDATION_FAILED,
-            "Request validation failed",
-            errors=[ErrorItem(code=Codes.INVALID_CURSOR, field="cursor", message=msg)],
-        )
+def invalid_cursor(msg: str = "cursor is malformed") -> ApiError:
+    return ApiError(
+        422,
+        Codes.VALIDATION_FAILED,
+        "Request validation failed",
+        errors=[ErrorItem(code=Codes.INVALID_CURSOR, field="cursor", message=msg)],
+    )
 
+
+def decode_cursor(cursor: str, filters: dict[str, Any], arity: int) -> list[Any]:
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         data = json.loads(base64.urlsafe_b64decode(padded.encode()))
         key = data["k"]
         fp = data["f"]
     except Exception as exc:  # noqa: BLE001 - any decoding failure means "not our cursor"
-        raise bad("cursor is malformed") from exc
+        raise invalid_cursor("cursor is malformed") from exc
     if not isinstance(key, list) or len(key) != arity:
-        raise bad("cursor is malformed")
+        raise invalid_cursor("cursor is malformed")
     if fp != filters_fingerprint(filters):
-        raise bad("cursor was issued for a different set of filters")
+        raise invalid_cursor("cursor was issued for a different set of filters")
     return key
 
 
