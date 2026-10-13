@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
-from app.api.deps import Actor, ClockDep, Cursor, DbSession, Limit
+from app.api.deps import NO_NUL, Actor, ClockDep, Cursor, DbSession, Limit
 from app.errors import PROBLEM_JSON
 from app.schemas import DispenseIn
 from app.services import catalog, dispensing
@@ -36,8 +36,8 @@ def list_(
     db: DbSession,
     limit: Limit,
     cursor: Cursor = None,
-    patient_ref: Annotated[str | None, Query(max_length=64)] = None,
-    medicine_code: Annotated[str | None, Query(max_length=32)] = None,
+    patient_ref: Annotated[str | None, Query(max_length=64, pattern=NO_NUL)] = None,
+    medicine_code: Annotated[str | None, Query(max_length=32, pattern=NO_NUL)] = None,
 ) -> dict[str, Any]:
     return catalog.list_dispenses(db, patient_ref, medicine_code, limit, cursor)
 
@@ -47,7 +47,7 @@ def attempts(
     db: DbSession,
     limit: Limit,
     cursor: Cursor = None,
-    patient_ref: Annotated[str | None, Query(max_length=64)] = None,
+    patient_ref: Annotated[str | None, Query(max_length=64, pattern=NO_NUL)] = None,
     outcome: Literal["accepted", "rejected"] | None = None,
 ) -> dict[str, Any]:
     return catalog.list_attempts(db, patient_ref, outcome, limit, cursor)

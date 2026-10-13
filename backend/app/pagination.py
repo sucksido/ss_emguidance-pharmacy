@@ -34,7 +34,10 @@ def invalid_cursor(msg: str = "cursor is malformed") -> ApiError:
     )
 
 
-def decode_cursor(cursor: str, filters: dict[str, Any], arity: int) -> list[Any]:
+def decode_cursor(cursor: str, filters: dict[str, Any], types: tuple[type, ...]) -> list[Any]:
+    """Decode and type-check a cursor. The filter hash is not a secret, so the
+    key's shape is validated too: a hand-made cursor must yield a 422, never
+    reach SQL with the wrong types."""
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         data = json.loads(base64.urlsafe_b64decode(padded.encode()))
@@ -42,8 +45,11 @@ def decode_cursor(cursor: str, filters: dict[str, Any], arity: int) -> list[Any]
         fp = data["f"]
     except Exception as exc:  # noqa: BLE001 - any decoding failure means "not our cursor"
         raise invalid_cursor("cursor is malformed") from exc
-    if not isinstance(key, list) or len(key) != arity:
+    if not isinstance(key, list) or len(key) != len(types):
         raise invalid_cursor("cursor is malformed")
+    for value, expected in zip(key, types, strict=True):
+        if isinstance(value, bool) or not isinstance(value, expected):
+            raise invalid_cursor("cursor is malformed")
     if fp != filters_fingerprint(filters):
         raise invalid_cursor("cursor was issued for a different set of filters")
     return key

@@ -38,7 +38,7 @@ def search_medicines(session: Session, q: str | None, limit: int, cursor: str | 
         # ILIKE '%term%' is served by the pg_trgm GIN indexes (migration 0004).
         stmt = stmt.where(or_(Medicine.name.ilike(pattern), Medicine.code.ilike(pattern)))
     if cursor:
-        name, mid = decode_cursor(cursor, filters, 2)
+        name, mid = decode_cursor(cursor, filters, (str, int))
         stmt = stmt.where(tuple_(Medicine.name, Medicine.id) > tuple_(name, mid))
     rows = session.scalars(stmt.order_by(Medicine.name, Medicine.id).limit(limit + 1)).all()
     more = len(rows) > limit
@@ -88,7 +88,7 @@ def list_dispenses(
             return page_envelope([], limit, None, filters)
         stmt = stmt.where(Dispense.medicine_id == med)
     if cursor:
-        ts, did = decode_cursor(cursor, filters, 2)
+        ts, did = decode_cursor(cursor, filters, (str, int))
         try:
             ts_val = datetime.fromisoformat(ts).astimezone(UTC)
         except (TypeError, ValueError) as exc:
@@ -111,7 +111,7 @@ def list_attempts(
     if outcome:
         stmt = stmt.where(DispenseAttempt.outcome == outcome)
     if cursor:
-        (aid,) = decode_cursor(cursor, filters, 1)
+        (aid,) = decode_cursor(cursor, filters, (int,))
         stmt = stmt.where(DispenseAttempt.id < aid)
     rows = session.scalars(stmt.order_by(DispenseAttempt.id.desc()).limit(limit + 1)).all()
     more = len(rows) > limit

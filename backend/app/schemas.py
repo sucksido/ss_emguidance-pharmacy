@@ -13,6 +13,21 @@ IdempotencyKey = Annotated[
 ]
 
 
+#: PostgreSQL text cannot store NUL; reject it at the edge as a field error.
+NO_NUL = r"^[^\x00]*$"
+#: Bounds well inside datetime/date arithmetic limits, so conversions to and
+#: from Africa/Johannesburg (and the +/-29 day window) can never overflow.
+MIN_DATE, MAX_DATE = date(1900, 1, 1), date(2100, 12, 31)
+
+
+def _check_date_range(d: date) -> date:
+    if not (MIN_DATE <= d <= MAX_DATE):
+        raise PydanticCustomError(
+            "date_out_of_range", "must be between {lo} and {hi}", {"lo": MIN_DATE.isoformat(), "hi": MAX_DATE.isoformat()}
+        )
+    return d
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -71,6 +86,11 @@ class NewRuleIn(StrictModel):
     max_quantity_per_30_days: int = Field(gt=0, strict=True)
     requires_authorisation: bool
 
+    @field_validator("effective_from", "effective_to")
+    @classmethod
+    def _in_range(cls, v: date | None) -> date | None:
+        return None if v is None else _check_date_range(v)
+
     # Field-level validators (not a model validator) so the error's ``loc`` - and
     # therefore the ``field`` in the error contract - names the offending field.
     @field_validator("effective_to")
@@ -101,12 +121,20 @@ class SupersedeOut(BaseModel):
 
 
 class DispenseIn(StrictModel):
-    medicine_code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
-    patient_ref: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    medicine_code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32, pattern=NO_NUL)]
+    patient_ref: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64, pattern=NO_NUL)]
     quantity: int = Field(gt=0, strict=True)
     dispensed_at: AwareDatetime = Field(description="Must carry a UTC offset. May be in the past.")
-    authorisation_ref: Annotated[str, StringConstraints(max_length=64)] | None = None
+    authorisation_ref: Annotated[str, StringConstraints(max_length=64, pattern=NO_NUL)] | None = None
     idempotency_key: IdempotencyKey
+
+    @field_validator("dispensed_at")
+    @classmethod
+    def _dispensed_in_range(cls, v: datetime) -> datetime:
+        # Compare the calendar date in the caller's own offset; the bounds are far
+        # enough from datetime.min/max that converting to UTC/SAST is then safe.
+        _check_date_range(v.date())
+        return v
 
 
 class DispenseOut(BaseModel):

@@ -15,7 +15,7 @@ def get_clock(request: Request) -> Clock:
     return getattr(request.app.state, "clock", None) or _system_clock
 
 
-def get_actor(x_actor: Annotated[str | None, Header(max_length=100)] = None) -> str | None:
+def get_actor(x_actor: Annotated[str | None, Header(max_length=100, pattern=r"^[^\x00]*$")] = None) -> str | None:
     """Stub identity (authentication is out of scope). Recorded for audit only."""
     return x_actor
 
@@ -25,8 +25,11 @@ def page_limit(limit: Annotated[int | None, Query(ge=1)] = None) -> int:
     return min(limit or s.default_page_size, s.max_page_size)
 
 
+#: PostgreSQL text cannot hold NUL; reject it as a 422 rather than let the driver 500.
+NO_NUL = r"^[^\x00]*$"
+
 DbSession = Annotated[Session, Depends(get_session)]
 ClockDep = Annotated[Clock, Depends(get_clock)]
 Actor = Annotated[str | None, Depends(get_actor)]
 Limit = Annotated[int, Depends(page_limit)]
-Cursor = Annotated[str | None, Query(max_length=500)]
+Cursor = Annotated[str | None, Query(max_length=500, pattern=NO_NUL)]
